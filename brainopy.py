@@ -34,6 +34,10 @@ class brainopy(object):
 
         @param brainDB String: Path to Brain database file. Default = None.
         """
+        self.neurotransmitter_axon_variation = 0.005
+        self.neurotransmitter_dendrite_variation = 0.005
+        self.neurotransmitter_neuron_variation = 0.005
+        self.neurotransmitter_synapse_variation = 0.005
         self.logging = False
         if brainDB == None:
             self.con = None
@@ -118,6 +122,32 @@ class brainopy(object):
         """
         self.cur.execute("INSERT INTO name_ID (ID, name, description) VALUES ('%s', '%s', '%s')" % (ID, name, description))
         if self.logging: self.logger("nameID", "ID=" + str(ID) + "/name=" + str(name) + "/description=" + str(description))
+
+    def readNeurotransmitters(self, identifier, identifier_type="name"):
+        """!
+        Method to read neurotransmitter values using an identifier (ID or name label tagged by nameID method). This can be used to read dendrite state, neuron state, axon state, or synapse state. If the identifier is a neuron body ID or name label of a neuron body, an empty dictionary will be returned. 
+
+        @param identifier String: ID or name label
+        @param identifier_type String: Type of identifier. Allowable values are "ID" (the identifier is an ID) and "name" (the identifier is a name label). Default = "name"
+        @return: Dictionary of neurotransmitter values - {<neurotransmitter>: <value>}
+        """
+        if identifier_type.lower() == "name":
+            self.cur.execute("SELECT table_name FROM name_ID_table WHERE name = '%s'" % identifier)
+            table_name = [x[0] for x in self.cur.fetchall()][0]
+            if table_name == "neuron_body": return {}
+            else: 
+                self.cur.execute("SELECT neurotransmitter, value FROM name_%s WHERE name = '%s'" % (table_name, identifier))
+        elif identifier_type.lower() == "id":
+            self.cur.execute("SELECT table_name FROM name_ID_table WHERE ID = '%s'" % identifier)
+            table_name = [x[0] for x in self.cur.fetchall()][0]
+            if table_name == "neuron_body": return {}
+            else: 
+                self.cur.execute("SELECT neurotransmitter, value FROM %s WHERE ID = '%s'" % (table_name, identifier))
+        else: return {}
+        neurotransmitters = {}
+        for neurotransmitter in [(x[0], x[1]) for x in self.cur.fetchall()]:
+            neurotransmitters[neurotransmitter[0]] = neurotransmitter[1]
+        return neurotransmitters
 
     def addNeurotransmitters(self, neurotransmitters):
         """!
@@ -349,11 +379,15 @@ class brainopy(object):
 
     def mfDendrite(self, neuron_ID):
         """!
-        Default Dendrite Modulator (DMF), which should be overridden based on specific usage. DNTF is based on individual neuron, represented by neuron_ID.
+        Default Dendrite Modulating Function (DMF), which should be overridden based on specific usage. DMF is based on individual neuron, represented by neuron_ID. This default DMF randomly varies each neurotransmitter in the neuron state by +/- proportion (determined by self.neurotransmitter_dendrite_variation) of its original value.
 
         @param neuron_ID String: ID of neuron
         """
-        neurotransmitters = self.getNeurotransmitters()
+        self.cur.execute("SELECT DISTINCT dendrite_state_ID FROM neuron WHERE neuron_ID = '%s'" % neuron_ID)
+        dendrite_state_IDs = [x[0] for x in self.cur.fetchall()]
+        if self.logging: self.logger("mfDendrite", "get_link")
+        for dendrite_state_ID in dendrite_state_IDs:
+            self.randomState("dendrite_state", dendrite_state_ID, self.neurotransmitter_dendrite_variation)
 
     def tfDendriteNeuron(self, neuron_ID):
         """!
@@ -384,14 +418,14 @@ class brainopy(object):
 
     def mfNeuron(self, neuron_ID):
         """!
-        Default Neuron Modulator (NMF), which should be overridden based on specific usage. DNTF is based on individual neuron, represented by neuron_ID. This default NMF randomly varies each neurotransmitter in the neuron state by +/- 1% of its original value.
+        Default Neuron Modulating Function (NMF), which should be overridden based on specific usage. DMF is based on individual neuron, represented by neuron_ID. This default NMF randomly varies each neurotransmitter in the neuron state by +/- proportion (determined by self.neurotransmitter_neuron_variation) of its original value.
 
         @param neuron_ID String: ID of neuron
         """
         self.cur.execute("SELECT DISTINCT neuron_state_ID FROM neuron WHERE neuron_ID = '%s'" % neuron_ID)
         neuron_state_ID = [x[0] for x in self.cur.fetchall()][0]
         if self.logging: self.logger("mfNeuron", "get_link")
-        self.randomState("neuron_state", neuron_state_ID, 0.01)
+        self.randomState("neuron_state", neuron_state_ID, self.neurotransmitter_neuron_variation)
 
     def tfNeuronAxon(self, neuron_ID):
         """!
@@ -419,11 +453,14 @@ class brainopy(object):
 
     def mfAxon(self, neuron_ID):
         """!
-        Default Axon Modulator (AMF), which should be overridden based on specific usage. DNTF is based on individual neuron, represented by neuron_ID.
+        Default Axon Modulating Function (AMF), which should be overridden based on specific usage. AMF is based on individual neuron, represented by neuron_ID. This default AMF randomly varies each neurotransmitter in the neuron state by +/- proportion (determined by self.neurotransmitter_axon_variation) of its original value.
 
         @param neuron_ID String: ID of neuron
         """
-        neurotransmitters = self.getNeurotransmitters()
+        self.cur.execute("SELECT DISTINCT axon_state_ID FROM neuron WHERE neuron_ID = '%s'" % neuron_ID)
+        axon_state_ID = [x[0] for x in self.cur.fetchall()][0]
+        if self.logging: self.logger("mfAxon", "get_link")
+        self.randomState("axon_state", axon_state_ID, self.neurotransmitter_axon_variation)
 
     def tfAxonSynapse(self, neuron_ID):
         """!
@@ -450,11 +487,12 @@ class brainopy(object):
 
     def mfSynapse(self, synapse_state_ID):
         """!
-        Default Synapse Modulator (SMF), which should be overridden based on specific usage. DNTF is based on individual synapse, represented by synapse_state_IDs.
+        Default Synapse Modulating Function (SMF), which should be overridden based on specific usage. SMF is based on individual synapse, represented by synapse_state_IDs. This default SMF randomly varies each neurotransmitter in the synapse state by +/- proportion (determined by self.neurotransmitter_synapse_variation) of its original value.
 
         @param synapse_state_ID String: ID of synapse state
         """
-        neurotransmitters = self.getNeurotransmitters()
+        if self.logging: self.logger("mfSynapse", "get_link")
+        self.randomState("synapse_state", synapse_state_ID, self.neurotransmitter_synapse_variation)
     
     def tfSynapseAxon(self, neuron_ID):
         """!
@@ -518,9 +556,9 @@ class brainopy(object):
         self.mtSynapsePrune()
         self.mtGlobal()
 
-    def runBrain(self, neuronList=[]):
+    def runBrain(self, neuronList=[], synapseList=[]):
         """!
-        Wrapper method to execute / run the entire brain or part of the brain. If a list of neuron_IDs (represented by neuronList) is not given, the entire brain will be executed / ran. To execute / run part of the brain, neurons (represented by neuron_IDs) for the part of the brain must be given as neuronList.
+        Wrapper method to execute / run the entire brain or part of the brain. If a list of neuron_IDs (represented by neuronList) and list of synapse IDs (represented by synapseList) are not given, the entire brain will be executed / ran. To execute / run part of the brain, neurons (represented by neuron_IDs in neuronList) and/or synapses (represented by synapse_state_IDs in synpaseList)for the part of the brain must be given as neuronList.
 
         The steps are as follow:
             1. Neuron processes / functions [(1) synapse to dendrite transfer function (SDTF), (2) dendrite modulator (DMF), (3) dendrite to neuron transfer function (DNTF), (4) neuron modulator (NMF), (5) neuron to axon transfer function (NATF), (6) axon modulator (AMF), and (7) axon to synapse transfer function (ASTF)] executed for each neuron.
@@ -529,9 +567,10 @@ class brainopy(object):
             Brain maintenance processes / functions [(1) neuronal growth function (NGF), (2) neuronal prune function (NPF), (3) synaptic growth function (SGF), (4) synaptic prune function (SPF), and (5) global maintenance function (GMF)] executed.
 
         @param neuroList List: List of neuron_IDs. Default = []
+        @param synapseList List: List of synapse_state_IDs. Default = []
         """
         if len(neuronList) == 0: neuronList = self.getIDs("neuron_body")
-        synapseList = self.getIDs("synapse_state")
+        if len(synapseList) == 0: synapseList = self.getIDs("synapse_state")
         for neuron_ID in neuronList: self.neuronFunction(neuron_ID)
         for synapse_state_ID in synapseList: self.mfSynapse(synapse_state_ID)
         for neuron_ID in neuronList: self.tfSynapseAxon(neuron_ID)

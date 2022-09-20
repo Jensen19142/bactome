@@ -38,10 +38,20 @@ for synapse_state_ID in synapseList:
     print("Inserted input signal into synapse " + synapse_state_ID)
 
 neuronList = b.getIDs("neuron_body")
+# Neuron List = [neuron_ID]
+print("Neurons to run brain: " + str(neuronList))
 
-b.nameID(neuronList[3], "neuron4", "neuron number 4")
 b.nameID(synapseList[3], "synapse4", "synapse number 4")
+print("Label " + synapseList[3] + " as synapse4")
 
-b.runBrain(neuronList)
+synapse4 = b.readNeurotransmitters("synapse4")
+print("Original state of synapse4 = " + str(synapse4))
+
+for cycle in range(1, 11):
+    b.runBrain(neuronList)
+    print("State of synapse4 after cycle " + str(cycle))
+    print("By name: " + str(b.readNeurotransmitters("synapse4")))
+    print("By ID: " + str(b.readNeurotransmitters(synapseList[3], "ID")))
+    print("")
 
 b.disconnectBrain()
